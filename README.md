@@ -112,3 +112,83 @@ plt.show()
 ---
 
 Do you want me to extend this demo to **generate audio files (e.g. WAV) after training**, so you can *listen* to the AME-D synth output?
+
+Here’s a **minimal AME-synth demo** in Python (NumPy + SciPy + soundfile).
+It outputs a `.wav` you can play back.
+
+---
+
+```python
+import numpy as np
+import soundfile as sf
+
+# ----------------------------
+# AME-Synth oscillator (1D)
+# ----------------------------
+def ame_synth(duration=5.0, sr=44100,
+              drift_gain=0.02,     # base pitch
+              noise_gain=0.01,    # noise amount
+              dither_gain=0.05,   # LFO modulation
+              macro_rate=2000,    # steps between macro events
+              macro_strength=0.5, # amplitude of macro events
+              seed=0):
+    rng = np.random.default_rng(seed)
+    n_samples = int(duration * sr)
+
+    theta = 0.0
+    C = 0.1
+    out = np.zeros(n_samples)
+
+    for t in range(n_samples):
+        # toy "loss trend" for adaptation
+        ΔL = np.sin(2*np.pi*0.1*t/sr)
+
+        # coefficient update (simple feedback)
+        C += 0.001 * ΔL
+
+        # drift term
+        drift = drift_gain * np.sin(2*np.pi*220*t/sr + C)
+
+        # adaptive noise
+        sigma = np.abs(C) * noise_gain
+        noise = sigma * rng.standard_normal()
+
+        # dither (slow LFO)
+        dither = dither_gain * np.sin(2*np.pi*2*t/sr + C)
+
+        # macro mutation burst
+        macro = 0.0
+        if (t % macro_rate) == 0:
+            macro = macro_strength * (2*rng.random()-1)
+
+        # AME update
+        theta = theta + drift + noise + dither + macro
+
+        # soft clipping to [-1,1]
+        out[t] = np.tanh(theta)
+
+    return out
+
+# ----------------------------
+# Generate and save waveform
+# ----------------------------
+signal = ame_synth(duration=5.0)
+sf.write("ame_synth.wav", signal, 44100)
+
+print("Wrote 'ame_synth.wav'. Play it to hear the AME oscillator.")
+```
+
+---
+
+## What you’ll hear
+
+* A **base tone** around 220 Hz (A3),
+* **Noise breathing** in and out,
+* **Low-frequency dither** adding vibrato,
+* **Occasional bursts** from macro mutations.
+
+Every run is different because the coefficients adapt online.
+
+---
+
+Do you want me to extend this demo so it can be **played live with MIDI knobs/sliders** (mapping them to AME’s drift, noise, dither, and macro parameters), turning it into a real chaotic synth?
